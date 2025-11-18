@@ -35,9 +35,11 @@ static const struct bitToCapName capTable[] =
 
 int initDevice(char* dev)
 {
+    printf("init %s\n", dev);
     int fd = open(dev, O_RDWR /* required */ | O_NONBLOCK, 0);
     if(fd == -1)
     {
+        fprintf(stderr, "Error: %s couldn't be opened\n", dev);
         return -1;
     }
     printf("%s opened as %d\n", dev, fd);
@@ -53,9 +55,6 @@ int initDevice(char* dev)
             printf("%s\n", capTable[i].name);
         }
     }
-
-    // device_caps
-    printf("\n");
     return fd;
 }
 
