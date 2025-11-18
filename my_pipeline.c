@@ -53,6 +53,50 @@ int main(int argc,char* argv[])
         }
     }
 
+    // Buffer negotiation -> mmap() -> VIDIOC_STREAMON
+    // 2-4 buffers each for capture and output, at least 2 to stop hardware stalls
+    // Size decided by format negotiation above e.g. 1280/720 'MJPG' ~ 1.2 MB 
+    struct v4l2_requestbuffers captureBuffers = {0};
+    captureBuffers.count = 4;
+    captureBuffers.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    captureBuffers.memory = V4L2_MEMORY_MMAP; // We will mmap() the memory later
+    if(-1 == ioctl(captureDevice, VIDIOC_REQBUFS, &captureBuffers))
+    {
+        errno_exit("VIDIOC_REQBUFS");
+    }
+    printf("capture buffers requested\n");
+
+
+    struct v4l2_requestbuffers outputBuffers = {0};
+    outputBuffers.count = 4;
+    outputBuffers.type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
+    outputBuffers.memory = V4L2_MEMORY_MMAP;
+    if(-1 == ioctl(outputDevice, VIDIOC_REQBUFS, &outputBuffers))
+    {
+        errno_exit("VIDIOC_REQBUFS");
+    }
+    printf("output buffers requested\n");
+
+
+    // Cleanup opposite direction as above
+    // VIDIOC_STREAMOFF -> mumap() -> buffer free -> close device
+    captureBuffers.count = 0;
+    captureBuffers.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    captureBuffers.memory = V4L2_MEMORY_MMAP; // We will mmap() the memory later
+    if(-1 == ioctl(captureDevice, VIDIOC_REQBUFS, &captureBuffers))
+    {
+        errno_exit("VIDIOC_REQBUFS");
+    }
+    printf("capture buffers freed\n");
+
+    outputBuffers.count = 0;
+    outputBuffers.type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
+    outputBuffers.memory = V4L2_MEMORY_MMAP; // We will mmap() the memory later
+    if(-1 == ioctl(outputDevice, VIDIOC_REQBUFS, &outputBuffers))
+    {
+        errno_exit("VIDIOC_REQBUFS");
+    }
+    printf("output buffers freed\n");
 
     close(captureDevice);
     close(outputDevice);
