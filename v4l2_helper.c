@@ -69,6 +69,9 @@ int initDevice(char* dev)
 bool checkDeviceCap(int fd, uint32_t device_caps)
 {
     struct v4l2_capability caps;
-    ioctl(fd, VIDIOC_QUERYCAP, &caps);
+    if(-1 == ioctl(fd, VIDIOC_QUERYCAP, &caps))
+    {
+        errno_exit("VIDIOC_QUERYCAP");
+    }
     return device_caps & caps.device_caps;
 }
