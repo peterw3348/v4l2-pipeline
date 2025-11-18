@@ -2,6 +2,9 @@
 #include <fcntl.h>      // for open()
 #include <sys/ioctl.h>  // for ioctl()
 #include <inttypes.h>   // for uint32_t
+#include <errno.h>      // for errno
+#include <stdlib.h>     // for EXIT_FAILURE
+#include <string.h>     // for strerror()
 
 #include <linux/videodev2.h>
 
@@ -33,14 +36,19 @@ static const struct bitToCapName capTable[] =
     {V4L2_CAP_VIDEO_M2M, "VIDEO_M2M"}
 };
 
+void errno_exit(const char *s)
+{
+        fprintf(stderr, "%s error %d %s\n", s, errno, strerror(errno));
+        exit(EXIT_FAILURE);
+}
+
 int initDevice(char* dev)
 {
     printf("init %s\n", dev);
     int fd = open(dev, O_RDWR /* required */ | O_NONBLOCK, 0);
     if(fd == -1)
     {
-        fprintf(stderr, "Error: %s couldn't be opened\n", dev);
-        return -1;
+        errno_exit("OPEN");
     }
     printf("%s opened as %d\n", dev, fd);
 
