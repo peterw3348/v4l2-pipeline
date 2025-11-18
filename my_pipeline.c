@@ -18,7 +18,17 @@ int main(int argc,char* argv[])
     int captureDevice = initDevice(argv[1]); // capture device
     printf("init outputDevice\n");
     int outputDevice = initDevice(argv[2]); // outputDevice
-
+    
+    if(!checkDeviceCap(captureDevice, V4L2_CAP_VIDEO_CAPTURE))
+    {
+        printf("Error: %s does not have video capture", argv[1]);
+        return -1;
+    }
+    if(!checkDeviceCap(outputDevice, V4L2_CAP_VIDEO_OUTPUT))
+    {
+        printf("Error: %s does not have video output", argv[2]);
+        return -1;
+    }
 
     close(captureDevice);
     close(outputDevice);

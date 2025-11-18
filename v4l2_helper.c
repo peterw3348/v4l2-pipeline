@@ -58,3 +58,10 @@ int initDevice(char* dev)
     printf("\n");
     return fd;
 }
+
+bool checkDeviceCap(int fd, uint32_t device_caps)
+{
+    struct v4l2_capability caps;
+    ioctl(fd, VIDIOC_QUERYCAP, &caps);
+    return device_caps & caps.device_caps;
+}
