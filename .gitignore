@@ -1,3 +1,2 @@
 *.exe
 .gdbinit
-run.sh
