@@ -11,31 +11,31 @@
 
 int main(int argc, char *argv[]) {
   if (argc < 3) {
-    fprintf(stderr, "%s <capture device> <outputDevice.fd>\n", argv[0]);
+    fprintf(stderr, "%s <capture device> <output_device>\n", argv[0]);
     return -1;
   }
 
-  Device captureDevice = {0};
-  Device outputDevice = {0};
+  struct device capture_device = {0};
+  struct device output_device = {0};
   int status;
-  if ((status = init_device(argv[1], V4L2_CAP_VIDEO_CAPTURE, &captureDevice)) !=
-      INIT_SUCCESS) {
+  if ((status = init_device(argv[1], V4L2_CAP_VIDEO_CAPTURE,
+                            &capture_device)) != INIT_SUCCESS) {
     init_err(status);
     return -1;
   }
-  if ((status = init_device(argv[2], V4L2_CAP_VIDEO_OUTPUT, &outputDevice)) !=
+  if ((status = init_device(argv[2], V4L2_CAP_VIDEO_OUTPUT, &output_device)) !=
       INIT_SUCCESS) {
     init_err(status);
     return -1;
   }
 
   //  Negotiating formats between devices
-  if (-1 == ioctl(captureDevice.fd, VIDIOC_G_FMT, &captureDevice.format)) {
+  if (-1 == ioctl(capture_device.fd, VIDIOC_G_FMT, &capture_device.format)) {
     errno_exit("VIDIOC_G_FMT");
   }
-  outputDevice.format = captureDevice.format;
-  outputDevice.format.type = V4L2_BUF_TYPE_VIDEO_OUTPUT; // Change type
-  if (-1 == ioctl(outputDevice.fd, VIDIOC_S_FMT, &outputDevice.format)) {
+  output_device.format = capture_device.format;
+  output_device.format.type = V4L2_BUF_TYPE_VIDEO_OUTPUT; // Change type
+  if (-1 == ioctl(output_device.fd, VIDIOC_S_FMT, &output_device.format)) {
     errno_exit("VIDIOC_S_FMT");
   }
 
@@ -43,23 +43,23 @@ int main(int argc, char *argv[]) {
   // 2-4 buffers each for capture and output, at least 2 to stop hardware stalls
   // Size decided by format negotiation above e.g. 1280/720 'MJPG' ~ 1.2 MB
 
-  captureDevice.mem_type = V4L2_MEMORY_MMAP; // Placeholder
-  outputDevice.mem_type = V4L2_MEMORY_MMAP;
-  mmap_buf(4, &captureDevice);
+  capture_device.mem_type = V4L2_MEMORY_MMAP; // Placeholder
+  output_device.mem_type = V4L2_MEMORY_MMAP;
+  mmap_buf(4, &capture_device);
   printf("capture buffers requested\n");
 
-  mmap_buf(4, &outputDevice);
+  mmap_buf(4, &output_device);
   printf("output buffers requested\n");
 
   // Cleanup opposite direction as above
   // VIDIOC_STREAMOFF -> mumap() -> buffer free -> close device
-  munmap_buf(&captureDevice);
+  munmap_buf(&capture_device);
   printf("capture buffers freed\n");
 
-  munmap_buf(&outputDevice);
+  munmap_buf(&output_device);
   printf("output buffers freed\n");
 
-  close(captureDevice.fd);
-  close(outputDevice.fd);
+  close(capture_device.fd);
+  close(output_device.fd);
   return 0;
 }

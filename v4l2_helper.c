@@ -49,26 +49,26 @@ static const struct bit_to_cap_name cap_table[] = {
  *   3. Checks whether the device advertises the required @device_cap.
  *   4. If supported, assigns the corresponding V4L2 buffer type
  *      (V4L2_BUF_TYPE_VIDEO_CAPTURE, V4L2_BUF_TYPE_VIDEO_OUTPUT, etc.).
- *   5. Initializes device->format.type, which is required before calling
+ *   5. Initializes dev->format.type, which is required before calling
  *      VIDIOC_G_FMT or VIDIOC_S_FMT.
  *
  * The Device struct is zero-initialized on entry. On failure, this function
  * returns an INIT_* code instead of exiting the program.
  */
-int init_device(char *dev_node, uint32_t device_cap, Device *device) {
+int init_device(char *dev_node, uint32_t device_cap, struct device *dev) {
   // fd, buf_type
   printf("init %s\n", dev_node);
   int initStatus = INIT_SUCCESS;
-  *device = (typeof(*device)){0};
+  *dev = (typeof(*dev)){0};
 
-  device->fd = open(dev_node, O_RDWR /* required */ | O_NONBLOCK, 0);
-  if (device->fd == -1) {
+  dev->fd = open(dev_node, O_RDWR /* required */ | O_NONBLOCK, 0);
+  if (dev->fd == -1) {
     errno_exit("OPEN");
   }
-  printf("%s opened as %d\n", dev_node, device->fd);
+  printf("%s opened as %d\n", dev_node, dev->fd);
 
   struct v4l2_capability caps;
-  ioctl(device->fd, VIDIOC_QUERYCAP, &caps);
+  ioctl(dev->fd, VIDIOC_QUERYCAP, &caps);
 
   printf("Device Caps:\n");
   initStatus = INIT_UNSUPPORTED;
@@ -81,11 +81,11 @@ int init_device(char *dev_node, uint32_t device_cap, Device *device) {
       {
         switch (device_cap) {
         case V4L2_CAP_VIDEO_CAPTURE:
-          device->buf_type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+          dev->buf_type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
           initStatus = INIT_SUCCESS;
           break;
         case V4L2_CAP_VIDEO_OUTPUT:
-          device->buf_type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
+          dev->buf_type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
           initStatus = INIT_SUCCESS;
           break;
         default: // unimplemented
@@ -95,16 +95,16 @@ int init_device(char *dev_node, uint32_t device_cap, Device *device) {
       }
     }
   }
-  if (device->buf_type) {
+  if (dev->buf_type) {
     // Kernel rejects format with empty type. How do we know type?
     // If we know the device caps, we will also know supported
     // buf types
-    device->format.type = device->buf_type;
+    dev->format.type = dev->buf_type;
   }
   return initStatus;
 }
 
-void req_buf(int count, Device *dev) {
+void req_buf(int count, struct device *dev) {
   struct v4l2_requestbuffers buf = {0};
   buf.count = count;
   buf.type = dev->buf_type;
@@ -114,13 +114,13 @@ void req_buf(int count, Device *dev) {
   }
 }
 
-void mmap_buf(int count, Device *dev) {
+void mmap_buf(int count, struct device *dev) {
   dev->mem_type = V4L2_MEMORY_MMAP;
   req_buf(4, dev);
   // mmap() code
 }
 
-void munmap_buf(Device *dev) {
+void munmap_buf(struct device *dev) {
   // munmap() code
   req_buf(0, dev);
 }

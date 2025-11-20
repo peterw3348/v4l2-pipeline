@@ -7,12 +7,12 @@
 
 enum InitStatus { INIT_SUCCESS = 0, INIT_UNSUPPORTED = 1, INIT_FAILURE = 2 };
 
-typedef struct {
+struct buffer {
   int *start;
   size_t length;
-} Buffer;
+};
 
-typedef struct {
+struct device {
   int fd;
 
   enum v4l2_buf_type buf_type;
@@ -21,14 +21,14 @@ typedef struct {
   struct v4l2_format format;
   struct v4l2_requestbuffers reqbuf;
 
-  Buffer *buffer;
+  struct buffer *buffer;
   size_t buffer_count;
-} Device;
+};
 
-int init_device(char *dev_node, uint32_t device_cap, Device *device);
+int init_device(char *dev_node, uint32_t device_cap, struct device *device);
 // Open the device and verify it supports the required V4L2 capability.
 
-void req_buf(int count, Device *dev);
+void req_buf(int count, struct device *dev);
 /* Allocate buffers via VIDIOC_REQBUFS. */
 
 void errno_exit(const char *s);
@@ -37,6 +37,6 @@ void errno_exit(const char *s);
 void init_err(int status);
 /* Print error text for init_device() failure. */
 
-void mmap_buf(int count, Device *dev);
+void mmap_buf(int count, struct device *dev);
 
-void munmap_buf(Device *dev);
+void munmap_buf(struct device *dev);
