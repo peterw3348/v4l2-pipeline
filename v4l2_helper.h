@@ -28,7 +28,7 @@ typedef struct {
 int init_device(char *dev_node, uint32_t device_cap, Device *device);
 // Open the device and verify it supports the required V4L2 capability.
 
-void req_buf(Device *dev, int count);
+void req_buf(int count, Device *dev);
 /* Allocate buffers via VIDIOC_REQBUFS. */
 
 void errno_exit(const char *s);
@@ -36,3 +36,7 @@ void errno_exit(const char *s);
 
 void init_err(int status);
 /* Print error text for init_device() failure. */
+
+void mmap_buf(int count, Device *dev);
+
+void munmap_buf(Device *dev);

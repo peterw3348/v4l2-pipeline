@@ -45,18 +45,18 @@ int main(int argc, char *argv[]) {
 
   captureDevice.mem_type = V4L2_MEMORY_MMAP; // Placeholder
   outputDevice.mem_type = V4L2_MEMORY_MMAP;
-  req_buf(&captureDevice, 4);
+  mmap_buf(4, &captureDevice);
   printf("capture buffers requested\n");
 
-  req_buf(&outputDevice, 4);
+  mmap_buf(4, &outputDevice);
   printf("output buffers requested\n");
 
   // Cleanup opposite direction as above
   // VIDIOC_STREAMOFF -> mumap() -> buffer free -> close device
-  req_buf(&captureDevice, 0);
+  munmap_buf(&captureDevice);
   printf("capture buffers freed\n");
 
-  req_buf(&outputDevice, 0);
+  munmap_buf(&outputDevice);
   printf("output buffers freed\n");
 
   close(captureDevice.fd);
