@@ -5,6 +5,8 @@
         "ioctl.h": "c",
         "videodev2.h": "c",
         "fcntl.h": "c",
-        "inttypes.h": "c"
+        "inttypes.h": "c",
+        "stdint.h": "c",
+        "stdbool.h": "c"
     }
 }
