@@ -28,7 +28,7 @@ struct device {
 int init_device(char *dev_node, uint32_t device_cap, struct device *device);
 // Open the device and verify it supports the required V4L2 capability.
 
-void req_buf(int count, struct device *dev);
+void req_buf(struct device *dev);
 /* Allocate buffers via VIDIOC_REQBUFS. */
 
 void errno_exit(const char *s);

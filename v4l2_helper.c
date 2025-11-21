@@ -104,9 +104,9 @@ int init_device(char *dev_node, uint32_t device_cap, struct device *dev) {
   return initStatus;
 }
 
-void req_buf(int count, struct device *dev) {
+void req_buf(struct device *dev) {
   struct v4l2_requestbuffers buf = {0};
-  buf.count = count;
+  buf.count = dev->buffer_count;
   buf.type = dev->buf_type;
   buf.memory = dev->mem_type;
   if (-1 == ioctl(dev->fd, VIDIOC_REQBUFS, &buf)) {
@@ -116,13 +116,16 @@ void req_buf(int count, struct device *dev) {
 
 void mmap_buf(int count, struct device *dev) {
   dev->mem_type = V4L2_MEMORY_MMAP;
-  req_buf(4, dev);
+  dev->buffer_count = count; // Each REQBUF call gives you count buffers, not
+                             // increment/decrement
+  req_buf(dev);
   // mmap() code
 }
 
 void munmap_buf(struct device *dev) {
   // munmap() code
-  req_buf(0, dev);
+  dev->buffer_count = 0; // See mmap() note on count
+  req_buf(dev);
 }
 
 /**
