@@ -6,6 +6,7 @@
 #include <stdlib.h>    // for EXIT_FAILURE
 #include <string.h>    // for strerror(), memset()
 #include <sys/ioctl.h> // for ioctl()
+#include <sys/mman.h>  // for mmap()
 
 #include <linux/videodev2.h>
 
@@ -98,20 +99,21 @@ int init_device(char *dev_node, uint32_t device_cap, struct device *dev) {
   if (dev->buf_type) {
     // Kernel rejects format with empty type. How do we know type?
     // If we know the device caps, we will also know supported
-    // buf types
+    // req types
     dev->format.type = dev->buf_type;
   }
   return initStatus;
 }
 
 void req_buf(struct device *dev) {
-  struct v4l2_requestbuffers buf = {0};
-  buf.count = dev->buffer_count;
-  buf.type = dev->buf_type;
-  buf.memory = dev->mem_type;
-  if (-1 == ioctl(dev->fd, VIDIOC_REQBUFS, &buf)) {
+  struct v4l2_requestbuffers req = {0};
+  req.count = dev->buffer_count;
+  req.type = dev->buf_type;
+  req.memory = dev->mem_type;
+  if (-1 == ioctl(dev->fd, VIDIOC_REQBUFS, &req)) {
     errno_exit("VIDIOC_REQBUFS");
   }
+  dev->buffer_count = req.count; // May get less than requested
 }
 
 void mmap_buf(int count, struct device *dev) {
@@ -119,11 +121,42 @@ void mmap_buf(int count, struct device *dev) {
   dev->buffer_count = count; // Each REQBUF call gives you count buffers, not
                              // increment/decrement
   req_buf(dev);
-  // mmap() code
+  if (dev->buffer_count < 2) {
+    fprintf(stderr, "Out of memory on device\n");
+    exit(EXIT_FAILURE);
+  }
+  dev->buffer = calloc(dev->buffer_count, sizeof(struct buffer));
+  if (!dev->buffer) {
+    fprintf(stderr, "Out of memory\n");
+    exit(EXIT_FAILURE);
+  }
+  for (int i = 0; i < dev->buffer_count; ++i) {
+    struct v4l2_buffer buf = {0};
+    buf.index = i;
+    buf.type = dev->buf_type;
+    buf.memory = dev->mem_type;
+    if (-1 == ioctl(dev->fd, VIDIOC_QUERYBUF, &buf)) {
+      errno_exit("VIDIOC_QUERYBUF");
+    }
+    dev->buffer[i].length = buf.length;
+    dev->buffer[i].start =
+        mmap(NULL, buf.length, PROT_READ | PROT_WRITE /* required */,
+             MAP_SHARED /* recommended */, dev->fd, buf.m.offset);
+    if (dev->buffer[i].start == MAP_FAILED) {
+      errno_exit("mmap");
+    }
+  }
 }
 
 void munmap_buf(struct device *dev) {
-  // munmap() code
+  for (int i = 0; i < dev->buffer_count; ++i) {
+    if (-1 == munmap(dev->buffer[i].start, dev->buffer[i].length)) {
+      errno_exit("munmap");
+    }
+    dev->buffer[i].length = 0;
+    dev->buffer[i].start = NULL;
+  }
+  free(dev->buffer);
   dev->buffer_count = 0; // See mmap() note on count
   req_buf(dev);
 }
