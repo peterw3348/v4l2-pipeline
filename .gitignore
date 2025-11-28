@@ -1,2 +1,3 @@
 *.exe
 .gdbinit
+frames

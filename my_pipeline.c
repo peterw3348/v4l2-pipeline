@@ -8,6 +8,7 @@
 
 #include "v4l2_helper.h"
 
+#define FRAME_DUMP_COUNT 10
 // V4L2 demo using integrated webcam, v4l2 loopback and mmap()
 
 void capture_frames(struct device *capture_device) {
@@ -26,6 +27,39 @@ void capture_frames(struct device *capture_device) {
 
   start_stream(capture_device);
   printf("capture stream started\n");
+
+  char filename[64];
+  for (int i = 0; i < FRAME_DUMP_COUNT; ++i) {
+    struct v4l2_buffer buf = {0};
+    buf.type = capture_device->buf_type;
+    buf.memory = capture_device->mem_type;
+
+    printf("frame%d started\n", i);
+    while (1) {
+      if (-1 == xioctl(capture_device->fd, VIDIOC_DQBUF, &buf)) {
+        switch (errno) {
+        case EAGAIN:
+          break;
+        case EIO:
+        default:
+          errno_exit("VIDIOC_S_FMT");
+        }
+      } else {
+        break;
+      }
+    }
+
+    snprintf(filename, sizeof(filename), "frames/frame%d.jpg", i);
+    int fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    write(fd, capture_device->buffer[buf.index].start,
+          capture_device->buffer[buf.index].length);
+    close(fd);
+
+    if (-1 == xioctl(capture_device->fd, VIDIOC_QBUF, &buf)) {
+      errno_exit("VIDIOC_Q_FMT");
+    }
+    printf("frame%d done\n", i);
+  }
 
   stop_stream(capture_device);
   printf("capture stream stopped\n");
