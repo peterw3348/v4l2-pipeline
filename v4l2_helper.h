@@ -40,3 +40,7 @@ void init_err(int status);
 void mmap_buf(int count, struct device *dev);
 
 void munmap_buf(struct device *dev);
+
+void start_stream(struct device *dev);
+
+void stop_stream(struct device *dev);

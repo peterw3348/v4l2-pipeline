@@ -195,3 +195,24 @@ void init_err(int status) {
     fprintf(stderr, "ERROR: Init");
   }
 }
+
+void start_stream(struct device *dev) {
+  for (int i = 0; i < dev->buffer_count; ++i) {
+    struct v4l2_buffer buf = {0};
+    buf.index = i;
+    buf.memory = dev->mem_type;
+    buf.type = dev->buf_type;
+    if (-1 == ioctl(dev->fd, VIDIOC_QBUF, &buf)) {
+      errno_exit("VIDIOC_QBUF");
+    }
+    if (-1 == ioctl(dev->fd, VIDIOC_STREAMON, &dev->buf_type)) {
+      errno_exit("VIDIOC_STREAMON");
+    }
+  }
+}
+
+void stop_stream(struct device *dev) {
+  if (-1 == ioctl(dev->fd, VIDIOC_STREAMOFF, &dev->buf_type)) {
+    errno_exit("VIDIOC_STREAMON");
+  }
+}

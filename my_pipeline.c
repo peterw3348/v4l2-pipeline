@@ -24,6 +24,12 @@ void capture_frames(struct device *capture_device) {
   mmap_buf(4, capture_device);
   printf("capture buffers requested\n");
 
+  start_stream(capture_device);
+  printf("capture stream started\n");
+  
+  stop_stream(capture_device);
+  printf("capture stream stopped\n");
+
   munmap_buf(capture_device);
   printf("capture buffers freed\n");
 
@@ -51,6 +57,9 @@ void capture_to_output(struct device *capture_device,
 
   mmap_buf(4, output_device);
   printf("output buffers requested\n");
+
+  // TODO: add STREAMON/STREAMOFF code for both devices
+  // Add conversion from MJPEG to YUV
 
   // Cleanup opposite direction as above
   // VIDIOC_STREAMOFF -> mumap() -> buffer free -> close device
