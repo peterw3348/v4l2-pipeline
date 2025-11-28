@@ -1,10 +1,7 @@
-#include <errno.h>    // for errno
 #include <fcntl.h>    // for open()
 #include <inttypes.h> // for uint32_t
 #include <stdbool.h>  // for bool
 #include <stdio.h>
-#include <stdlib.h>    // for EXIT_FAILURE
-#include <string.h>    // for strerror(), memset()
 #include <sys/ioctl.h> // for ioctl()
 #include <sys/mman.h>  // for mmap()
 
@@ -69,7 +66,7 @@ int init_device(char *dev_node, uint32_t device_cap, struct device *dev) {
   printf("%s opened as %d\n", dev_node, dev->fd);
 
   struct v4l2_capability caps;
-  ioctl(dev->fd, VIDIOC_QUERYCAP, &caps);
+  xioctl(dev->fd, VIDIOC_QUERYCAP, &caps);
 
   printf("Device Caps:\n");
   initStatus = INIT_UNSUPPORTED;
@@ -110,7 +107,7 @@ void req_buf(struct device *dev) {
   req.count = dev->buffer_count;
   req.type = dev->buf_type;
   req.memory = dev->mem_type;
-  if (-1 == ioctl(dev->fd, VIDIOC_REQBUFS, &req)) {
+  if (-1 == xioctl(dev->fd, VIDIOC_REQBUFS, &req)) {
     errno_exit("VIDIOC_REQBUFS");
   }
   dev->buffer_count = req.count; // May get less than requested
@@ -135,7 +132,7 @@ void mmap_buf(int count, struct device *dev) {
     buf.index = i;
     buf.type = dev->buf_type;
     buf.memory = dev->mem_type;
-    if (-1 == ioctl(dev->fd, VIDIOC_QUERYBUF, &buf)) {
+    if (-1 == xioctl(dev->fd, VIDIOC_QUERYBUF, &buf)) {
       errno_exit("VIDIOC_QUERYBUF");
     }
     dev->buffer[i].length = buf.length;
@@ -159,22 +156,6 @@ void munmap_buf(struct device *dev) {
   free(dev->buffer);
   dev->buffer_count = 0; // See mmap() note on count
   req_buf(dev);
-}
-
-/**
- * errno_exit() - Print an error message and abort.
- *
- * @s: Short tag string describing the failed operation (e.g. "OPEN",
- *     "VIDIOC_QUERYCAP", etc.).
- *
- * This helper prints the provided tag, the current errno value, and the
- * corresponding strerror() message to stderr. The process then terminates
- * with EXIT_FAILURE. This is intended for fatal V4L2 or system call
- * failures where recovery is not attempted.
- */
-void errno_exit(const char *s) {
-  fprintf(stderr, "%s error %d %s\n", s, errno, strerror(errno));
-  exit(EXIT_FAILURE);
 }
 
 /**
@@ -202,17 +183,17 @@ void start_stream(struct device *dev) {
     buf.index = i;
     buf.memory = dev->mem_type;
     buf.type = dev->buf_type;
-    if (-1 == ioctl(dev->fd, VIDIOC_QBUF, &buf)) {
+    if (-1 == xioctl(dev->fd, VIDIOC_QBUF, &buf)) {
       errno_exit("VIDIOC_QBUF");
     }
-    if (-1 == ioctl(dev->fd, VIDIOC_STREAMON, &dev->buf_type)) {
+    if (-1 == xioctl(dev->fd, VIDIOC_STREAMON, &dev->buf_type)) {
       errno_exit("VIDIOC_STREAMON");
     }
   }
 }
 
 void stop_stream(struct device *dev) {
-  if (-1 == ioctl(dev->fd, VIDIOC_STREAMOFF, &dev->buf_type)) {
+  if (-1 == xioctl(dev->fd, VIDIOC_STREAMOFF, &dev->buf_type)) {
     errno_exit("VIDIOC_STREAMON");
   }
 }

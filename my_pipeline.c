@@ -11,13 +11,13 @@
 // V4L2 demo using integrated webcam, v4l2 loopback and mmap()
 
 void capture_frames(struct device *capture_device) {
-  if (-1 == ioctl(capture_device->fd, VIDIOC_G_FMT, &capture_device->format)) {
+  if (-1 == xioctl(capture_device->fd, VIDIOC_G_FMT, &capture_device->format)) {
     errno_exit("VIDIOC_G_FMT");
   }
   assert(capture_device->format.type == V4L2_BUF_TYPE_VIDEO_CAPTURE);
   assert(capture_device->format.fmt.pix.pixelformat == V4L2_PIX_FMT_MJPEG);
 
-  if (-1 == ioctl(capture_device->fd, VIDIOC_G_FMT, &capture_device->format)) {
+  if (-1 == xioctl(capture_device->fd, VIDIOC_G_FMT, &capture_device->format)) {
     errno_exit("VIDIOC_G_FMT");
   }
 
@@ -26,7 +26,7 @@ void capture_frames(struct device *capture_device) {
 
   start_stream(capture_device);
   printf("capture stream started\n");
-  
+
   stop_stream(capture_device);
   printf("capture stream stopped\n");
 
@@ -39,7 +39,7 @@ void capture_frames(struct device *capture_device) {
 void capture_to_output(struct device *capture_device,
                        struct device *output_device) {
   //  Negotiating formats between devices
-  if (-1 == ioctl(capture_device->fd, VIDIOC_G_FMT, &capture_device->format)) {
+  if (-1 == xioctl(capture_device->fd, VIDIOC_G_FMT, &capture_device->format)) {
     errno_exit("VIDIOC_G_FMT");
   }
   output_device->format = capture_device->format;

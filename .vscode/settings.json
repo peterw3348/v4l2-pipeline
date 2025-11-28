@@ -7,6 +7,7 @@
         "fcntl.h": "c",
         "inttypes.h": "c",
         "stdint.h": "c",
-        "stdbool.h": "c"
+        "stdbool.h": "c",
+        "stddef.h": "c"
     }
 }
