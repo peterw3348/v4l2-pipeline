@@ -18,6 +18,21 @@ void capture_frames(struct device *capture_device) {
   assert(capture_device->format.type == V4L2_BUF_TYPE_VIDEO_CAPTURE);
   assert(capture_device->format.fmt.pix.pixelformat == V4L2_PIX_FMT_MJPEG);
 
+  capture_device->format.fmt.pix.pixelformat = V4L2_PIX_FMT_MJPEG;
+  capture_device->format.fmt.pix.width = 160;
+  capture_device->format.fmt.pix.height = 120;
+  if (-1 == xioctl(capture_device->fd, VIDIOC_S_FMT, &capture_device->format)) {
+    errno_exit("VIDIOC_S_FMT");
+  }
+  struct v4l2_streamparm fps = {0};
+  fps.type = capture_device->buf_type;
+  fps.parm.capture.timeperframe.numerator = 1;
+  fps.parm.capture.timeperframe.denominator = 5;
+  if (-1 == xioctl(capture_device->fd, VIDIOC_S_PARM, &fps)) {
+    errno_exit("VIDIOC_S_PARM");
+  }
+  printf("format set on capture device\n");
+
   if (-1 == xioctl(capture_device->fd, VIDIOC_G_FMT, &capture_device->format)) {
     errno_exit("VIDIOC_G_FMT");
   }
@@ -73,14 +88,30 @@ void capture_frames(struct device *capture_device) {
 void capture_to_output(struct device *capture_device,
                        struct device *output_device) {
   //  Negotiating formats between devices
-  if (-1 == xioctl(capture_device->fd, VIDIOC_G_FMT, &capture_device->format)) {
-    errno_exit("VIDIOC_G_FMT");
-  }
-  output_device->format = capture_device->format;
-  output_device->format.type = V4L2_BUF_TYPE_VIDEO_OUTPUT; // Change type
-  if (-1 == ioctl(output_device->fd, VIDIOC_S_FMT, &output_device->format)) {
+  capture_device->format.fmt.pix.pixelformat = V4L2_PIX_FMT_MJPEG;
+  capture_device->format.fmt.pix.width = 160;
+  capture_device->format.fmt.pix.height = 120;
+  if (-1 == xioctl(capture_device->fd, VIDIOC_S_FMT, &capture_device->format)) {
     errno_exit("VIDIOC_S_FMT");
   }
+  struct v4l2_streamparm fps = {0};
+  fps.type = capture_device->buf_type;
+  fps.parm.capture.timeperframe.numerator = 1;
+  fps.parm.capture.timeperframe.denominator = 5;
+  if (-1 == xioctl(capture_device->fd, VIDIOC_S_PARM, &fps)) {
+    errno_exit("VIDIOC_S_PARM");
+  }
+  printf("format set on capture device\n");
+
+  output_device->format.fmt.pix.pixelformat = V4L2_PIX_FMT_YUYV;
+  output_device->format.fmt.pix.width = 160;
+  output_device->format.fmt.pix.height = 120;
+  output_device->format.fmt.pix.bytesperline = 160 * 2;
+  output_device->format.fmt.pix.sizeimage = 160 * 120 * 2;
+  if (-1 == xioctl(output_device->fd, VIDIOC_S_FMT, &output_device->format)) {
+    errno_exit("VIDIOC_S_FMT");
+  }
+  printf("format set on output device\n");
 
   // Buffer negotiation -> mmap() -> VIDIOC_STREAMON
   // 2-4 buffers each for capture and output, at least 2 to stop hardware stalls
@@ -126,7 +157,13 @@ int main(int argc, char *argv[]) {
     init_err(status);
     return -1;
   }
-  capture_frames(&capture_device);
-  // capture_to_output(&capture_device, &output_device);
+
+  // printf("enum_caps for %d\n", capture_device.fd);
+  // enum_caps(&capture_device);
+  // printf("enum_caps for %d\n", output_device.fd);
+  // enum_caps(&output_device);
+
+  // capture_frames(&capture_device);
+  capture_to_output(&capture_device, &output_device);
   return 0;
 }

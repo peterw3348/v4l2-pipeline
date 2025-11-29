@@ -197,3 +197,48 @@ void stop_stream(struct device *dev) {
     errno_exit("VIDIOC_STREAMON");
   }
 }
+
+void enum_caps(struct device *dev) {
+  // Upper idx not known - go up until ioctl call fails
+  // Hiearchical structure pix format -> frame size -> interval
+  for (int i = 0;; ++i) {
+    struct v4l2_fmtdesc fmt = {0};
+    fmt.index = i;
+    fmt.type = dev->buf_type;
+    if (-1 == xioctl(dev->fd, VIDIOC_ENUM_FMT, &fmt)) {
+      if (errno == EINVAL)
+        break;
+      errno_exit("VIDIOC_ENUM_FRAMESIZES");
+    }
+    printf("pixel fmt %d\n", i);
+    for (int j = 0;; ++j) {
+      struct v4l2_frmsizeenum frame_size = {0};
+      frame_size.index = j;
+      frame_size.pixel_format = fmt.pixelformat;
+      if (-1 == xioctl(dev->fd, VIDIOC_ENUM_FRAMESIZES, &frame_size)) {
+        if (errno == EINVAL)
+          break;
+        errno_exit("VIDIOC_ENUM_FRAMESIZES");
+      }
+      printf("frame size %d\n", j);
+      for (int k = 0;; ++k) {
+        struct v4l2_frmivalenum interval = {0};
+        interval.index = k;
+        interval.pixel_format = fmt.pixelformat;
+        if (frame_size.type == V4L2_FRMSIZE_TYPE_DISCRETE) {
+          interval.width = frame_size.discrete.width;
+          interval.height = frame_size.discrete.height;
+        } else {
+          fprintf(stderr, "Unsupported frame type\n");
+          // exit(EXIT_FAILURE);
+        }
+        if (-1 == xioctl(dev->fd, VIDIOC_ENUM_FRAMEINTERVALS, &interval)) {
+          if (errno == EINVAL)
+            break;
+          errno_exit("VIDIOC_ENUM_FRAMEINTERVALS");
+        }
+        printf("interval %d\n", k);
+      }
+    }
+  }
+}
