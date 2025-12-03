@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <sys/ioctl.h> // for ioctl()
 #include <sys/mman.h>  // for mmap()
+#include <unistd.h>    // for close()
 
 #include <linux/videodev2.h>
 
@@ -241,4 +242,10 @@ void enum_caps(struct device *dev) {
       }
     }
   }
+}
+
+void deinit_device(struct device *device) {
+  stop_stream(device);
+  munmap_buf(device);
+  close(device->fd);
 }

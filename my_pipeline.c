@@ -1,5 +1,7 @@
+#include "conversion.h"
 #include <assert.h>
-#include <fcntl.h> // for open()
+#include <fcntl.h>  // for open()
+#include <signal.h> // for signal
 #include <stdio.h>
 #include <sys/ioctl.h> // for ioctl()
 #include <unistd.h>    // for close()
@@ -9,6 +11,11 @@
 #include "v4l2_helper.h"
 
 #define FRAME_DUMP_COUNT 10
+
+volatile sig_atomic_t running = 1;
+
+void handle_sigint(int sig) { running = 0; }
+
 // V4L2 demo using integrated webcam, v4l2 loopback and mmap()
 
 void capture_frames(struct device *capture_device) {
@@ -50,14 +57,14 @@ void capture_frames(struct device *capture_device) {
     buf.memory = capture_device->mem_type;
 
     printf("frame%d started\n", i);
-    while (1) {
+    while (running) {
       if (-1 == xioctl(capture_device->fd, VIDIOC_DQBUF, &buf)) {
         switch (errno) {
         case EAGAIN:
           break;
         case EIO:
         default:
-          errno_exit("VIDIOC_S_FMT");
+          errno_exit("VIDIOC_DQBUF");
         }
       } else {
         break;
@@ -71,7 +78,7 @@ void capture_frames(struct device *capture_device) {
     close(fd);
 
     if (-1 == xioctl(capture_device->fd, VIDIOC_QBUF, &buf)) {
-      errno_exit("VIDIOC_Q_FMT");
+      errno_exit("VIDIOC_QBUF");
     }
     printf("frame%d done\n", i);
   }
@@ -123,8 +130,68 @@ void capture_to_output(struct device *capture_device,
   mmap_buf(4, output_device);
   printf("output buffers requested\n");
 
-  // TODO: add STREAMON/STREAMOFF code for both devices
-  // Add conversion from MJPEG to YUV
+  start_stream(capture_device);
+  printf("capture stream started\n");
+  start_stream(output_device);
+  printf("output stream started\n");
+
+  conversion_init();
+  int i = 0;
+  while (running) {
+    printf("%d:\n", i);
+    ++i;
+    struct v4l2_buffer cap_buf = {0};
+    cap_buf.type = capture_device->buf_type;
+    cap_buf.memory = capture_device->mem_type;
+    while (1) {
+      if (-1 == xioctl(capture_device->fd, VIDIOC_DQBUF, &cap_buf)) {
+        switch (errno) {
+        case EAGAIN:
+          break;
+        case EIO:
+        default:
+          errno_exit("VIDIOC_DQBUF");
+        }
+      } else {
+        break;
+      }
+    }
+    printf("frame exit cap\n");
+    struct v4l2_buffer out_buf = {0};
+    out_buf.type = output_device->buf_type;
+    out_buf.memory = output_device->mem_type;
+    while (1) {
+      if (-1 == xioctl(output_device->fd, VIDIOC_DQBUF, &out_buf)) {
+        switch (errno) {
+        case EAGAIN:
+          break;
+        case EIO:
+        default:
+          errno_exit("VIDIOC_DQBUF");
+        }
+      } else {
+        break;
+      }
+    }
+    printf("frame exit out\n");
+    jpeg_to_yuyv(capture_device->buffer[cap_buf.index],
+                 output_device->buffer[out_buf.index]);
+    out_buf.bytesused = output_device->format.fmt.pix.sizeimage;
+
+    if (-1 == xioctl(capture_device->fd, VIDIOC_QBUF, &cap_buf)) {
+      errno_exit("VIDIOC_QBUF cap");
+    }
+    if (-1 == xioctl(output_device->fd, VIDIOC_QBUF, &out_buf)) {
+      errno_exit("VIDIOC_QBUF out");
+    }
+  }
+
+  conversion_deinit();
+
+  stop_stream(capture_device);
+  printf("capture stream stopped\n");
+  stop_stream(output_device);
+  printf("output stream stopped\n");
 
   // Cleanup opposite direction as above
   // VIDIOC_STREAMOFF -> mumap() -> buffer free -> close device
@@ -143,6 +210,7 @@ int main(int argc, char *argv[]) {
     fprintf(stderr, "%s <capture device> <output_device>\n", argv[0]);
     return -1;
   }
+  signal(SIGINT, handle_sigint);
 
   struct device capture_device = {0};
   struct device output_device = {0};

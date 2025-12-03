@@ -8,6 +8,11 @@
         "inttypes.h": "c",
         "stdint.h": "c",
         "stdbool.h": "c",
-        "stddef.h": "c"
+        "stddef.h": "c",
+        "conversion.h": "c",
+        "turbojpeg.h": "c",
+        "string.h": "c",
+        "stdlib.h": "c",
+        "buffer.h": "c"
     }
 }

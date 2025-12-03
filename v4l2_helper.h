@@ -1,20 +1,15 @@
 #pragma once
+#include "buffer.h"
+#include "conversion.h"
 #include <errno.h> // for errno
 #include <linux/videodev2.h>
 #include <stdbool.h> // bool
-#include <stddef.h>  // size_t
 #include <stdint.h>  // uint32_t
 #include <stdlib.h>  // for EXIT_FAILURE
 #include <string.h>  // for strerror()
 
-enum InitStatus { INIT_SUCCESS = 0, INIT_UNSUPPORTED = 1, INIT_FAILURE = 2 };
-
-struct buffer {
-  int *start;
-  size_t length;
-};
-
 struct device {
+  char *name;
   int fd;
 
   enum v4l2_buf_type buf_type;
@@ -26,6 +21,8 @@ struct device {
   struct buffer *buffer;
   size_t buffer_count;
 };
+
+enum InitStatus { INIT_SUCCESS = 0, INIT_UNSUPPORTED = 1, INIT_FAILURE = 2 };
 
 int init_device(char *dev_node, uint32_t device_cap, struct device *device);
 // Open the device and verify it supports the required V4L2 capability.
@@ -45,6 +42,8 @@ void start_stream(struct device *dev);
 void stop_stream(struct device *dev);
 
 void enum_caps(struct device *dev);
+
+void deinit_device(struct device *device);
 
 /* Print an error message and abort. */
 static inline void errno_exit(const char *s) {
