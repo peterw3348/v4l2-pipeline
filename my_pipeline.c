@@ -11,6 +11,7 @@
 #include "v4l2_helper.h"
 
 #define FRAME_DUMP_COUNT 10
+#define YUYV_BYTES_PER_PIXEL 2
 
 volatile sig_atomic_t running = 1;
 
@@ -92,16 +93,18 @@ void capture_frames(struct device *capture_device) {
   close(capture_device->fd);
 }
 
-void capture_to_output(struct device *capture_device,
-                       struct device *output_device) {
+void capture_to_output_mmap(struct device *capture_device,
+                            struct device *output_device) {
+  unsigned int width = 160;
+  unsigned int height = 120;
   //  Negotiating formats between devices
   capture_device->format.fmt.pix.pixelformat = V4L2_PIX_FMT_MJPEG;
-  capture_device->format.fmt.pix.width = 160;
-  capture_device->format.fmt.pix.height = 120;
+  capture_device->format.fmt.pix.width = width;
+  capture_device->format.fmt.pix.height = height;
   if (-1 == xioctl(capture_device->fd, VIDIOC_S_FMT, &capture_device->format)) {
     errno_exit("VIDIOC_S_FMT");
   }
-  struct v4l2_streamparm fps = {0};
+  struct v4l2_streamparm fps = {0}; // 5 fps
   fps.type = capture_device->buf_type;
   fps.parm.capture.timeperframe.numerator = 1;
   fps.parm.capture.timeperframe.denominator = 5;
@@ -111,10 +114,11 @@ void capture_to_output(struct device *capture_device,
   printf("format set on capture device\n");
 
   output_device->format.fmt.pix.pixelformat = V4L2_PIX_FMT_YUYV;
-  output_device->format.fmt.pix.width = 160;
-  output_device->format.fmt.pix.height = 120;
-  output_device->format.fmt.pix.bytesperline = 160 * 2;
-  output_device->format.fmt.pix.sizeimage = 160 * 120 * 2;
+  output_device->format.fmt.pix.width = width;
+  output_device->format.fmt.pix.height = height;
+  output_device->format.fmt.pix.bytesperline = width * YUYV_BYTES_PER_PIXEL;
+  output_device->format.fmt.pix.sizeimage =
+      width * height * YUYV_BYTES_PER_PIXEL;
   if (-1 == xioctl(output_device->fd, VIDIOC_S_FMT, &output_device->format)) {
     errno_exit("VIDIOC_S_FMT");
   }
@@ -205,6 +209,123 @@ void capture_to_output(struct device *capture_device,
   close(output_device->fd);
 }
 
+void capture_to_output_dmabuf(struct device *capture_device,
+                              struct device *output_device) {
+  unsigned int width = 160;
+  unsigned int height = 120;
+  //  Negotiating formats between devices
+  capture_device->format.fmt.pix.pixelformat = V4L2_PIX_FMT_MJPEG;
+  capture_device->format.fmt.pix.width = width;
+  capture_device->format.fmt.pix.height = height;
+  if (-1 == xioctl(capture_device->fd, VIDIOC_S_FMT, &capture_device->format)) {
+    errno_exit("VIDIOC_S_FMT");
+  }
+  struct v4l2_streamparm fps = {0};
+  fps.type = capture_device->buf_type;
+  fps.parm.capture.timeperframe.numerator = 1;
+  fps.parm.capture.timeperframe.denominator = 5;
+  if (-1 == xioctl(capture_device->fd, VIDIOC_S_PARM, &fps)) {
+    errno_exit("VIDIOC_S_PARM");
+  }
+  printf("format set on capture device\n");
+
+  output_device->format.fmt.pix.pixelformat = V4L2_PIX_FMT_YUYV;
+  output_device->format.fmt.pix.width = width;
+  output_device->format.fmt.pix.height = height;
+  output_device->format.fmt.pix.bytesperline = width * YUYV_BYTES_PER_PIXEL;
+  output_device->format.fmt.pix.sizeimage =
+      width * height * YUYV_BYTES_PER_PIXEL;
+  if (-1 == xioctl(output_device->fd, VIDIOC_S_FMT, &output_device->format)) {
+    errno_exit("VIDIOC_S_FMT");
+  }
+  printf("format set on output device\n");
+
+  // Buffer negotiation -> mmap() -> VIDIOC_STREAMON
+  // 2-4 buffers each for capture and output, at least 2 to stop hardware stalls
+  // Size decided by format negotiation above e.g. 1280/720 'MJPG' ~ 1.2 MB
+
+  mmap_buf(4, capture_device);
+  printf("capture buffers requested\n");
+  dmabuf_init(4, output_device);
+  printf("output buffers requested\n");
+
+  start_stream(capture_device);
+  printf("capture stream started\n");
+  start_stream(output_device);
+  printf("output stream started\n");
+
+  conversion_init();
+  int i = 0;
+  while (running) {
+    printf("%d:\n", i);
+    ++i;
+    struct v4l2_buffer cap_buf = {0};
+    cap_buf.type = capture_device->buf_type;
+    cap_buf.memory = capture_device->mem_type;
+    while (1) {
+      if (-1 == xioctl(capture_device->fd, VIDIOC_DQBUF, &cap_buf)) {
+        switch (errno) {
+        case EAGAIN:
+          break;
+        case EIO:
+        default:
+          errno_exit("VIDIOC_DQBUF");
+        }
+      } else {
+        break;
+      }
+    }
+    printf("frame exit cap\n");
+    struct v4l2_buffer out_buf = {0};
+    out_buf.type = output_device->buf_type;
+    out_buf.memory = output_device->mem_type;
+    while (1) {
+      if (-1 == xioctl(output_device->fd, VIDIOC_DQBUF, &out_buf)) {
+        switch (errno) {
+        case EAGAIN:
+          break;
+        case EIO:
+        default:
+          errno_exit("VIDIOC_DQBUF");
+        }
+      } else {
+        break;
+      }
+    }
+    printf("frame exit out\n");
+    jpeg_to_yuyv(capture_device->buffer[cap_buf.index],
+                 output_device->buffer[out_buf.index]);
+    out_buf.bytesused = output_device->format.fmt.pix.sizeimage;
+
+    if (-1 == xioctl(capture_device->fd, VIDIOC_QBUF, &cap_buf)) {
+      errno_exit("VIDIOC_QBUF cap");
+    }
+    if (-1 == xioctl(output_device->fd, VIDIOC_QBUF, &out_buf)) {
+      errno_exit("VIDIOC_QBUF out");
+    }
+  }
+
+  conversion_deinit();
+
+  stop_stream(capture_device);
+  printf("capture stream stopped\n");
+  stop_stream(output_device);
+  printf("output stream stopped\n");
+
+  // Cleanup opposite direction as above
+  // VIDIOC_STREAMOFF -> mumap() -> buffer free -> close device
+  munmap_buf(capture_device);
+  printf("capture buffers freed\n");
+
+  munmap_buf(output_device);
+  printf("output buffers freed\n");
+
+  dmabuf_deinit(output_device);
+
+  close(capture_device->fd);
+  close(output_device->fd);
+}
+
 int main(int argc, char *argv[]) {
   if (argc < 3) {
     fprintf(stderr, "%s <capture device> <output_device>\n", argv[0]);
@@ -232,6 +353,7 @@ int main(int argc, char *argv[]) {
   // enum_caps(&output_device);
 
   // capture_frames(&capture_device);
-  capture_to_output(&capture_device, &output_device);
+  // capture_to_output_mmap(&capture_device, &output_device);
+  capture_to_output_dmabuf(&capture_device, &output_device);
   return 0;
 }

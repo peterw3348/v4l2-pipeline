@@ -45,6 +45,10 @@ void enum_caps(struct device *dev);
 
 void deinit_device(struct device *device);
 
+void dmabuf_init(int count, struct device *dev);
+
+void dmabuf_deinit(struct device *dev);
+
 /* Print an error message and abort. */
 static inline void errno_exit(const char *s) {
   fprintf(stderr, "%s error %d %s\n", s, errno, strerror(errno));

@@ -5,4 +5,5 @@
 struct buffer {
   uint8_t *start;
   size_t length;
+  int fd; // DMABUF
 };

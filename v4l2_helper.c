@@ -1,6 +1,9 @@
-#include <fcntl.h>    // for open()
-#include <inttypes.h> // for uint32_t
-#include <stdbool.h>  // for bool
+#define _GNU_SOURCE
+
+#include <fcntl.h>       // for open()
+#include <inttypes.h>    // for uint32_t
+#include <linux/memfd.h> // for memfd_create()
+#include <stdbool.h>     // for bool
 #include <stdio.h>
 #include <sys/ioctl.h> // for ioctl()
 #include <sys/mman.h>  // for mmap()
@@ -184,12 +187,16 @@ void start_stream(struct device *dev) {
     buf.index = i;
     buf.memory = dev->mem_type;
     buf.type = dev->buf_type;
+    if (dev->mem_type == V4L2_MEMORY_DMABUF) {
+      buf.m.fd = dev->buffer[i].fd;
+      buf.bytesused = dev->buffer[i].length;
+    }
     if (-1 == xioctl(dev->fd, VIDIOC_QBUF, &buf)) {
       errno_exit("VIDIOC_QBUF");
     }
-    if (-1 == xioctl(dev->fd, VIDIOC_STREAMON, &dev->buf_type)) {
-      errno_exit("VIDIOC_STREAMON");
-    }
+  }
+  if (-1 == xioctl(dev->fd, VIDIOC_STREAMON, &dev->buf_type)) {
+    errno_exit("VIDIOC_STREAMON");
   }
 }
 
@@ -248,4 +255,53 @@ void deinit_device(struct device *device) {
   stop_stream(device);
   munmap_buf(device);
   close(device->fd);
+}
+
+void dmabuf_init(int count, struct device *dev) {
+  dev->mem_type = V4L2_MEMORY_DMABUF;
+  dev->buffer_count = count; // Each REQBUF call gives you count buffers, not
+                             // increment/decrement
+  req_buf(dev);
+  if (dev->buffer_count < 2) {
+    fprintf(stderr, "Out of memory on device\n");
+    exit(EXIT_FAILURE);
+  }
+  dev->buffer = calloc(dev->buffer_count, sizeof(struct buffer));
+  if (!dev->buffer) {
+    fprintf(stderr, "Out of memory\n");
+    exit(EXIT_FAILURE);
+  }
+  for (int i = 0; i < dev->buffer_count; ++i) {
+    struct v4l2_buffer buf = {0};
+    buf.index = i;
+    buf.type = dev->buf_type;
+    buf.memory = dev->mem_type;
+    if (-1 == xioctl(dev->fd, VIDIOC_QUERYBUF, &buf)) {
+      errno_exit("VIDIOC_QUERYBUF");
+    }
+    dev->buffer[i].length = buf.length;
+    dev->buffer[i].fd = memfd_create("dmabuf", 0);
+    ftruncate(dev->buffer[i].fd, buf.length);
+
+    dev->buffer[i].start =
+        mmap(NULL, buf.length, PROT_READ | PROT_WRITE /* required */,
+             MAP_SHARED /* recommended */, dev->buffer[i].fd, 0);
+    if (dev->buffer[i].start == MAP_FAILED) {
+      errno_exit("mmap");
+    }
+  }
+}
+
+void dmabuf_deinit(struct device *dev) {
+  for (int i = 0; i < dev->buffer_count; ++i) {
+    if (-1 == munmap(dev->buffer[i].start, dev->buffer[i].length)) {
+      errno_exit("munmap");
+    }
+    dev->buffer[i].length = 0;
+    dev->buffer[i].start = NULL;
+    close(dev->buffer[i].fd);
+  }
+  free(dev->buffer);
+  dev->buffer_count = 0; // See mmap() note on count
+  req_buf(dev);
 }

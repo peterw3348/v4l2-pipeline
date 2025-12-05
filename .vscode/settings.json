@@ -13,6 +13,10 @@
         "turbojpeg.h": "c",
         "string.h": "c",
         "stdlib.h": "c",
-        "buffer.h": "c"
+        "buffer.h": "c",
+        "unistd.h": "c",
+        "memfd.h": "c",
+        "mman.h": "c",
+        "initializer_list": "c"
     }
 }
