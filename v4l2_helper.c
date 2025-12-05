@@ -10,6 +10,8 @@
 
 #include "v4l2_helper.h"
 
+#define YUYV_BYTES_PER_PIXEL 2
+
 struct bit_to_cap_name {
   uint32_t bit;
   const char *name;
@@ -54,23 +56,21 @@ static const struct bit_to_cap_name cap_table[] = {
  * The Device struct is zero-initialized on entry. On failure, this function
  * returns an INIT_* code instead of exiting the program.
  */
-int init_device(char *dev_node, uint32_t device_cap, struct device *dev) {
-  // fd, buf_type
-  printf("init %s\n", dev_node);
-  int initStatus = INIT_SUCCESS;
+void init_device(char *dev_node, uint32_t device_cap, int width, int height,
+                 struct device *dev) {
   *dev = (typeof(*dev)){0};
-
+  dev->name = dev_node;
+  printf("%s: init\n", dev->name);
   dev->fd = open(dev_node, O_RDWR /* required */ | O_NONBLOCK, 0);
   if (dev->fd == -1) {
-    errno_exit("OPEN");
+    errno_exit("open");
   }
-  printf("%s opened as %d\n", dev_node, dev->fd);
+  printf("%s: opened as %d\n", dev_node, dev->fd);
 
   struct v4l2_capability caps;
   xioctl(dev->fd, VIDIOC_QUERYCAP, &caps);
 
   printf("Device Caps:\n");
-  initStatus = INIT_UNSUPPORTED;
   for (int i = 0; i < sizeof(cap_table) / sizeof(struct bit_to_cap_name); ++i) {
     if (cap_table[i].bit & caps.device_caps) // check supported device_caps
     {
@@ -81,14 +81,13 @@ int init_device(char *dev_node, uint32_t device_cap, struct device *dev) {
         switch (device_cap) {
         case V4L2_CAP_VIDEO_CAPTURE:
           dev->buf_type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-          initStatus = INIT_SUCCESS;
           break;
         case V4L2_CAP_VIDEO_OUTPUT:
           dev->buf_type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
-          initStatus = INIT_SUCCESS;
           break;
         default: // unimplemented
-          initStatus = INIT_FAILURE;
+          fprintf(stderr, "UNSUPPORTED\n");
+          exit(EXIT_FAILURE);
           break;
         }
       }
@@ -100,7 +99,51 @@ int init_device(char *dev_node, uint32_t device_cap, struct device *dev) {
     // req types
     dev->format.type = dev->buf_type;
   }
-  return initStatus;
+  // Format negotitation -> REQBUF -> QUERYBUF -> mmap() -> QBUF ->
+  // VIDIOC_STREAMON 2-4 buffers each for capture and output, at least 2 buffer
+  // to stop hardware stalls
+  printf("%s: S_FMT\n", dev->name);
+  if (dev->format.type == V4L2_BUF_TYPE_VIDEO_CAPTURE) {
+    dev->format.fmt.pix.pixelformat = V4L2_PIX_FMT_MJPEG;
+    dev->format.fmt.pix.width = width;
+    dev->format.fmt.pix.height = height;
+    if (-1 == xioctl(dev->fd, VIDIOC_S_FMT, &dev->format)) {
+      errno_exit("VIDIOC_S_FMT");
+    }
+
+    struct v4l2_streamparm fps = {0};
+    fps.type = dev->buf_type;
+    fps.parm.capture.timeperframe.numerator = 1;
+    fps.parm.capture.timeperframe.denominator = 5; // 5 fps
+    if (-1 == xioctl(dev->fd, VIDIOC_S_PARM, &fps)) {
+      errno_exit("VIDIOC_S_PARM");
+    }
+  } else if (dev->format.type == V4L2_CAP_VIDEO_OUTPUT) {
+    dev->format.fmt.pix.pixelformat = V4L2_PIX_FMT_YUYV;
+    dev->format.fmt.pix.width = width;
+    dev->format.fmt.pix.height = height;
+    dev->format.fmt.pix.bytesperline = width * YUYV_BYTES_PER_PIXEL;
+    dev->format.fmt.pix.sizeimage = width * height * YUYV_BYTES_PER_PIXEL;
+    if (-1 == xioctl(dev->fd, VIDIOC_S_FMT, &dev->format)) {
+      errno_exit("VIDIOC_S_FMT");
+    }
+  } else {
+    fprintf(stderr, "UNSUPPORTED\n");
+    exit(EXIT_FAILURE);
+  }
+  mmap_buf(4, dev);
+  printf("%s: STREAMON\n", dev->name);
+  start_stream(dev);
+}
+
+void deinit_device(struct device *device) {
+  // VIDIOC_STREAMOFF -> mumap() -> buffer free -> close device
+  printf("%s: STREAMOFF\n", device->name);
+  stop_stream(device);
+  printf("%s: MUMAP\n", device->name);
+  munmap_buf(device);
+  printf("%s: CLOSE\n", device->name);
+  close(device->fd);
 }
 
 void req_buf(struct device *dev) {
@@ -118,6 +161,7 @@ void mmap_buf(int count, struct device *dev) {
   dev->mem_type = V4L2_MEMORY_MMAP;
   dev->buffer_count = count; // Each REQBUF call gives you count buffers, not
                              // increment/decrement
+  printf("%s: REQBUF\n", dev->name);
   req_buf(dev);
   if (dev->buffer_count < 2) {
     fprintf(stderr, "Out of memory on device\n");
@@ -128,6 +172,7 @@ void mmap_buf(int count, struct device *dev) {
     fprintf(stderr, "Out of memory\n");
     exit(EXIT_FAILURE);
   }
+  printf("%s: MMAP\n", dev->name);
   for (int i = 0; i < dev->buffer_count; ++i) {
     struct v4l2_buffer buf = {0};
     buf.index = i;
@@ -157,25 +202,6 @@ void munmap_buf(struct device *dev) {
   free(dev->buffer);
   dev->buffer_count = 0; // See mmap() note on count
   req_buf(dev);
-}
-
-/**
- * init_err() - Print a human-readable error message for init_device().
- *
- * @status: Initialization return code (INIT_SUCCESS, INIT_UNSUPPORTED,
- *          INIT_FAILURE).
- *
- * This function prints a short diagnostic error message describing why
- * init_device() failed. It does not exit the program. The caller is responsible
- * for handling the failure case.
- */
-void init_err(int status) {
-  switch (status) {
-  case INIT_UNSUPPORTED:
-    fprintf(stderr, "ERROR: Device does not have provided capability");
-  case INIT_FAILURE:
-    fprintf(stderr, "ERROR: Init");
-  }
 }
 
 void start_stream(struct device *dev) {
@@ -242,10 +268,4 @@ void enum_caps(struct device *dev) {
       }
     }
   }
-}
-
-void deinit_device(struct device *device) {
-  stop_stream(device);
-  munmap_buf(device);
-  close(device->fd);
 }
