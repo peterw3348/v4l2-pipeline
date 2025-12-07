@@ -7,8 +7,8 @@
  * @brief MJPEG → YUYV conversion API using libjpeg-turbo.
  *
  * These functions provide a small userspace conversion pipeline:
- *   1. Decode MJPEG into an intermediate I420 (YUV420 planar) buffer.
- *   2. Convert I420 into YUYV (YUY2) for V4L2 output devices.
+ *   1. Decode MJPEG into an intermediate RGB888 buffer.
+ *   2. Convert RBG888 into YUYV (YUY2) for V4L2 output devices.
  *
  * The conversion state is kept internally and must be initialized
  * with conversion_init() before calling jpeg_to_yuyv().
