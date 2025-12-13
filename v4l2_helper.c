@@ -131,7 +131,7 @@ void init_device(char *dev_node, uint32_t device_cap, int width, int height,
     fprintf(stderr, "UNSUPPORTED\n");
     exit(EXIT_FAILURE);
   }
-  mmap_buf(4, dev);
+  dmabuf(4, dev);
   printf("%s: STREAMON\n", dev->name);
   start_stream(dev);
 }
@@ -204,12 +204,43 @@ void munmap_buf(struct device *dev) {
   req_buf(dev);
 }
 
+void dmabuf(int count, struct device *dev) {
+  dev->mem_type = V4L2_MEMORY_DMABUF;
+  dev->buffer_count = count; // Each REQBUF call gives you count buffers, not
+                             // increment/decrement
+  printf("%s: REQBUF\n", dev->name);
+  req_buf(dev);
+  if (dev->buffer_count < 2) {
+    fprintf(stderr, "Out of memory on device\n");
+    exit(EXIT_FAILURE);
+  }
+  dev->buffer = calloc(dev->buffer_count, sizeof(struct buffer));
+  if (!dev->buffer) {
+    fprintf(stderr, "Out of memory\n");
+    exit(EXIT_FAILURE);
+  }
+  printf("%s: FD\n", dev->name);
+  for (int i = 0; i < dev->buffer_count; ++i) {
+    int fd = memfd_create("v4l2-dmabuf", MFD_CLOEXEC | MFD_ALLOW_SEALING);
+    int length = dev->format.fmt.pix.sizeimage;
+    ftruncate(fd, length);
+    fcntl(fd, F_ADD_SEALS, F_SEAL_SHRINK | F_SEAL_GROW | F_SEAL_SEAL);
+    printf("%d buffer is %d bytes using %d fd\n", i, length, fd);
+    dev->buffer[i].fd = fd;
+    dev->buffer[i].length = length;
+  }
+}
+
 void start_stream(struct device *dev) {
   for (int i = 0; i < dev->buffer_count; ++i) {
     struct v4l2_buffer buf = {0};
     buf.index = i;
     buf.memory = dev->mem_type;
     buf.type = dev->buf_type;
+    if (dev->mem_type == V4L2_MEMORY_DMABUF) {
+      buf.m.fd = dev->buffer[i].fd;
+      buf.length = dev->buffer[i].length;
+    }
     if (-1 == xioctl(dev->fd, VIDIOC_QBUF, &buf)) {
       errno_exit("VIDIOC_QBUF");
     }

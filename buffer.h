@@ -14,4 +14,5 @@
 struct buffer {
   uint8_t *start; ///< Pointer to buffer memory
   size_t length;  ///< Length of buffer in bytes
+  int fd;
 };
