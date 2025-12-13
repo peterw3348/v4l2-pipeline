@@ -63,6 +63,17 @@ void mmap_buf(int count, struct device *dev);
 void munmap_buf(struct device *dev);
 
 /**
+ * @brief Request, query, and mmap() N buffers.
+ */
+void dmabuf(int count, struct device *dev);
+
+/**
+ * @brief Unmap previously mapped buffers and free user-space tracking
+ * structures.
+ */
+void undmabuf(struct device *dev);
+
+/**
  * @brief Queue every buffer then start streaming with VIDIOC_STREAMON.
  */
 void start_stream(struct device *dev);
