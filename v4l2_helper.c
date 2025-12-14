@@ -244,9 +244,9 @@ void start_stream(struct device *dev) {
     if (-1 == xioctl(dev->fd, VIDIOC_QBUF, &buf)) {
       errno_exit("VIDIOC_QBUF");
     }
-    if (-1 == xioctl(dev->fd, VIDIOC_STREAMON, &dev->buf_type)) {
-      errno_exit("VIDIOC_STREAMON");
-    }
+  }
+  if (-1 == xioctl(dev->fd, VIDIOC_STREAMON, &dev->buf_type)) {
+    errno_exit("VIDIOC_STREAMON");
   }
 }
 
