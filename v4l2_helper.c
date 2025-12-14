@@ -118,7 +118,7 @@ void init_device(char *dev_node, uint32_t device_cap, int width, int height,
     if (-1 == xioctl(dev->fd, VIDIOC_S_PARM, &fps)) {
       errno_exit("VIDIOC_S_PARM");
     }
-  } else if (dev->format.type == V4L2_CAP_VIDEO_OUTPUT) {
+  } else if (dev->format.type == V4L2_BUF_TYPE_VIDEO_OUTPUT) {
     dev->format.fmt.pix.pixelformat = V4L2_PIX_FMT_YUYV;
     dev->format.fmt.pix.width = width;
     dev->format.fmt.pix.height = height;
