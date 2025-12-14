@@ -1,0 +1,19 @@
+{
+  "configurations": [
+    {
+      "name": "Linux",
+      "compilerPath": "/usr/bin/gcc",
+      "defines": [
+        "_GNU_SOURCE"
+      ],
+      "includePath": [
+        "/usr/include",
+        "/usr/include/linux",
+        "${workspaceFolder}/**"
+      ],
+      "cStandard": "gnu11",
+      "intelliSenseMode": "linux-gcc-x64"
+    }
+  ],
+  "version": 4
+}
